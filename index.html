@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Cool Game with BabylonJS Shader</title>
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>
+    <script src="https://cdn.babylonjs.com/loaders/babylon.glTF2FileLoader.js"></script>
+    <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+    <script src="https://cdn.babylonjs.com/gui/babylon.gui.min.js"></script>
+    <style>
+        /* Make the canvas fill the entire browser window */
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            /* Remove height: 100% to allow scrolling */
+        }
+        .canvas-container {
+            width: 100%;
+            height: 100vh; /* Use viewport height instead of percentage */
+            position: relative;
+        }
+        #renderCanvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+            outline: none;
+        }
+        #infoWindow {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 0;
+            transform: translateY(-50%);
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.3);
+            z-index: 1000;
+            margin-left: 100px;
+        }
+        .close-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            cursor: pointer;
+            font-size: 20px;
+        }
+        .sidebar {
+            position: absolute;
+            right: 50px;
+            top: 50%;
+            transform: translateY(-50%);
+            height: 500px;
+        }
+    </style>
+</head>
+<body>
+        <img src="Page_Top.png" style="width: 100%;">
+        <div class="canvas-container">
+            <img src="sidebar.png" class="sidebar">
+            <canvas id="renderCanvas" tabindex="-1"></canvas>
+        </div>
+        <div id="infoWindow">
+            <span class="close-btn" onclick="closeInfoWindow()">&times;</span>
+            <img src="Panorama.png" alt="Panorama view" style="height: 600px;">
+        </div>
+        <img src="Page_Bottom.png" style="width: 100%;">
+    </div>
+    <script>
+        // Function to show info window
+        function showInfoWindow() {
+            document.getElementById('infoWindow').style.display = 'block';
+        }
+
+        // Function to close info window
+        function closeInfoWindow() {
+            document.getElementById('infoWindow').style.display = 'none';
+        }
+
+        // Get the canvas element
+        var canvas = document.getElementById("renderCanvas");
+
+        // Generate the BABYLON 3D engine
+        var engine = new BABYLON.Engine(canvas, true);
+
+        // Create the scene
+        var createScene = async function () {
+            var scene = new BABYLON.Scene(engine);
+            
+            // Define shared variables at scene level
+            let hoveredPrimitive = '';
+            let defaultShaderMaterial;
+            let hoverShaderMaterial;
+            let clickedShaderMaterial;
+
+            // Set the background color to pure white
+            scene.clearColor = new BABYLON.Color3(1, 1, 1);
+
+            // Camera setup function
+            const setupCamera = () => {
+                const camera = new BABYLON.ArcRotateCamera("camera", Math.PI / 3.5, Math.PI / 3.5, 40, new BABYLON.Vector3(0, 0, 0), scene);
+                camera.attachControl(canvas, true, false);
+                camera.fov = 0.5;
+                camera.inertia = 0.7;
+                camera.angularSensibilityX = 300;
+                camera.angularSensibilityY = 300;
+                camera.lowerRadiusLimit = camera.upperRadiusLimit = camera.radius; // Disable zooming
+                return camera;
+                
+            };
+            
+            // Shader setup functions
+            const createShaderMaterials = (scene) => {
+                const vertexShaderCode = `
+                    precision highp float;
+                    attribute vec3 position;
+                    attribute vec3 normal;
+                    uniform mat4 worldViewProjection;
+                    varying vec3 vNormal;
+                    void main(void) {
+                        vNormal = normal;
+                        gl_Position = worldViewProjection * vec4(position, 1.0);
+                    }
+                `;
+
+                const fragmentShaders = {
+                    default: `
+                        precision highp float;
+                        varying vec3 vNormal;
+                        void main(void) {
+                            vec3 normalizedNormal = normalize(vNormal);
+                            if (normalizedNormal.y > 0.9) {
+                                gl_FragColor = vec4(0.122, 0.106, 0.075, 1.0);
+                            } else {
+                                gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
+                            }
+                        }
+                    `,
+                    hover: `
+                        precision highp float;
+                        varying vec3 vNormal;
+                        void main(void) {
+                            vec3 normalizedNormal = normalize(vNormal);
+                            gl_FragColor = vec4(1.0, 0.937, 0.816, 1.0);
+                        }
+                    `,
+                    clicked: `
+                        precision highp float;
+                        varying vec3 vNormal;
+                        void main(void) {
+                            gl_FragColor = vec4(1.0, 0.776, 0.0, 1.0);
+                        }
+                    `
+                };
+
+                return {
+                    default: new BABYLON.ShaderMaterial("defaultShader", scene, {
+                        vertexSource: vertexShaderCode,
+                        fragmentSource: fragmentShaders.default,
+                    }, {
+                        attributes: ["position", "normal", "uv"],
+                        uniforms: ["world", "worldViewProjection", "view", "projection"]
+                    }),
+                    hover: new BABYLON.ShaderMaterial("hoverShader", scene, {
+                        vertexSource: vertexShaderCode,
+                        fragmentSource: fragmentShaders.hover,
+                    }, {
+                        attributes: ["position", "normal", "uv"],
+                        uniforms: ["world", "worldViewProjection", "view", "projection"]
+                    }),
+                    clicked: new BABYLON.ShaderMaterial("clickedShader", scene, {
+                        vertexSource: vertexShaderCode,
+                        fragmentSource: fragmentShaders.clicked,
+                    }, {
+                        attributes: ["position", "normal", "uv"],
+                        uniforms: ["world", "worldViewProjection", "view", "projection"]
+                    })
+                };
+            };
+
+            // Mesh interaction setup
+            const setupMeshInteractions = (mesh, materials, camera) => {
+                if (mesh.name === "Hitbox") {
+                    mesh.visibility = 0;
+                    mesh.actionManager = new BABYLON.ActionManager(scene);
+                    
+                    mesh.actionManager.registerAction(new BABYLON.ExecuteCodeAction(
+                        BABYLON.ActionManager.OnPointerOverTrigger,
+                        () => {
+                            const pinScaleUpAnimation = scene.getAnimationGroupByName("PinScaleUp_1");
+                            if (pinScaleUpAnimation) {
+                                pinScaleUpAnimation.start(false);
+                            }
+
+                            // Handle primitive1 color change
+                            const primitive1 = scene.getMeshByName("GroundFloor_primitive1");
+                            if (primitive1) {
+                                if (primitive1.material !== materials.clicked) {
+                                    primitive1.material = materials.hover;
+                                }
+                            }
+                        }
+                    ));
+
+                    mesh.actionManager.registerAction(new BABYLON.ExecuteCodeAction(
+                        BABYLON.ActionManager.OnPointerOutTrigger,
+                        () => {
+                            const pinScaleDownAnimation = scene.getAnimationGroupByName("PinScaleDown_1");
+                            if (pinScaleDownAnimation) {
+                                pinScaleDownAnimation.start(false);
+                            }
+
+                            // Handle primitive1 color change
+                            const primitive1 = scene.getMeshByName("GroundFloor_primitive1");
+                            if (primitive1) {
+                                if (primitive1.material !== materials.clicked) {
+                                    primitive1.material = materials.default;
+                                    
+                                    // Only play PinDisapear_1 if primitive1 is not being hovered
+                                    if (hoveredPrimitive !== "GroundFloor_primitive1") {
+                                        const pinDisappearAnimation = scene.getAnimationGroupByName("PinDisapear_1");
+                                        if (pinDisappearAnimation) {
+                                            pinDisappearAnimation.start(false);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    ));
+
+                    // Add click action for hitbox
+                    mesh.actionManager.registerAction(new BABYLON.ExecuteCodeAction(
+                        BABYLON.ActionManager.OnPickTrigger,
+                        () => {
+                            showInfoWindow();
+                        }
+                    ));
+                    return;
+                }
+
+                const marker1 = scene.getTransformNodeByName("Marker_1");
+                if (marker1 && marker1.getChildMeshes().includes(mesh)) {
+                    console.log("found marker1 child:", mesh.name);
+                    return;
+                }
+
+                // Edge rendering setup
+                mesh.enableEdgesRendering();
+                mesh.edgesWidth = mesh.name === "GroundFloor_primitive10" ? 2.0 : 8.0;
+                mesh.edgesColor = new BABYLON.Color4(0.121, 0.106, 0.075, 1);
+
+                // Apply materials
+                materials.default.forceCompilation(mesh);
+                materials.hover.forceCompilation(mesh);
+                materials.clicked.forceCompilation(mesh);
+                mesh.material = materials.default;
+
+                // Setup interactions for ground floor primitives
+                if (mesh.name.match(/^GroundFloor_primitive[1-9]$/)) {
+                    setupGroundFloorInteractions(mesh, materials, camera);
+                }
+            };
+
+            // Ground floor specific interactions
+            const setupGroundFloorInteractions = (mesh, materials, camera) => {
+                mesh.actionManager = new BABYLON.ActionManager(scene);
+                
+                // Hover actions
+                mesh.actionManager.registerAction(new BABYLON.ExecuteCodeAction(
+                    BABYLON.ActionManager.OnPointerOverTrigger,
+                    () => {
+                        if (mesh.material !== materials.clicked) {
+                            mesh.material = materials.hover;
+                            hoveredPrimitive = mesh.name;
+
+                            // Play the animation group 'PinAppear_1' on hover only for GroundFloor_primitive1
+                            if (mesh.name === "GroundFloor_primitive1") {
+                                const pinAppearAnimation = scene.getAnimationGroupByName("PinAppear_1");
+                                if (pinAppearAnimation) {
+                                    pinAppearAnimation.start(false); // Ensure the animation does not loop
+                                }
+                            }
+                        }
+                    }
+                ));
+
+                mesh.actionManager.registerAction(new BABYLON.ExecuteCodeAction(
+                    BABYLON.ActionManager.OnPointerOutTrigger,
+                    () => {
+                        if (mesh.material !== materials.clicked) {
+                            mesh.material = materials.default;
+                            hoveredPrimitive = '';
+
+                            // Play the animation group 'PinDisapear_1' on hover end only for GroundFloor_primitive1
+                            if (mesh.name === "GroundFloor_primitive1") {
+                                const pinDisappearAnimation = scene.getAnimationGroupByName("PinDisapear_1");
+                                if (pinDisappearAnimation) {
+                                    pinDisappearAnimation.start(false); // Ensure the animation does not loop
+                                }
+                            }
+                        }
+                    }
+                ));
+
+                // Special handling for primitive1
+                if (mesh.name === "GroundFloor_primitive1") {
+                    setupPrimitive1Interactions(mesh, materials, camera);
+                }
+            };
+
+            // Primitive1 specific interactions
+            const setupPrimitive1Interactions = (mesh, materials, camera) => {
+                mesh.isClicked = false;
+                mesh.actionManager.registerAction(new BABYLON.ExecuteCodeAction(
+                    BABYLON.ActionManager.OnPickTrigger,
+                    () => {
+                        mesh.isClicked = !mesh.isClicked;
+                        if (mesh.isClicked) {
+                            mesh.material = materials.clicked;
+                            const marker = scene.getTransformNodeByName("Marker_1");
+                            if (marker) {
+                                animateCameraToPosition(camera, new BABYLON.Vector3(-marker.position.x, marker.position.y, marker.position.z));
+                            }
+                        } else {
+                            mesh.material = materials.default;
+                            animateCameraToPosition(camera, BABYLON.Vector3.Zero());
+                        }
+                    }
+                ));
+            };
+
+            // Camera animation helper
+            const animateCameraToPosition = (camera, targetPosition) => {
+                BABYLON.Animation.CreateAndStartAnimation(
+                    "cameraAnimation",
+                    camera,
+                    "target",
+                    30,
+                    15,
+                    camera.target,
+                    targetPosition,
+                    BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT
+                );
+            };
+
+            // Marker rotation setup
+            const setupMarkerRotation = (marker, camera) => {
+                const updateMarkerRotation = () => {
+                    const pin = scene.getMeshByName("Pin_primitive0");
+                    if (!pin) return;
+
+                    const direction = new BABYLON.Vector3(
+                        camera.position.x - pin.position.x,
+                        camera.position.y - pin.position.y,
+                        camera.position.z - pin.position.z
+                    );
+                    // Calculate rotation around Y axis (horizontal)
+                    marker.rotation.y = Math.atan2(direction.x, direction.z);
+                    // Calculate rotation around X axis (vertical)
+                    marker.rotation.x = Math.atan2(direction.y, Math.sqrt(direction.x * direction.x + direction.z * direction.z));
+                    
+                
+
+                    // Rotate all child meshes of marker
+                    marker.getChildMeshes().forEach(child => {
+                        child.rotation.x = -marker.rotation.x;
+                        child.rotation.y = -marker.rotation.y;
+                       // child.rotation.z = marker.rotation.z;
+                    });
+                };
+
+                scene.registerBeforeRender(updateMarkerRotation);
+            };
+
+            // Initialize scene components
+            const camera = setupCamera();
+            const materials = createShaderMaterials(scene);
+            defaultShaderMaterial = materials.default;
+            hoverShaderMaterial = materials.hover;
+            clickedShaderMaterial = materials.clicked;
+
+            // Load and setup model
+            await BABYLON.SceneLoader.AppendAsync("./", "object.glb", scene);
+
+            // Stop all animations initially
+            scene.animationGroups.forEach(animationGroup => {
+                animationGroup.reset();
+                animationGroup.stop();
+            });
+
+            // Set PinAppear_1 to its first frame
+            const pinAppearAnimation = scene.getAnimationGroupByName("PinAppear_1");
+            if (pinAppearAnimation) {
+                pinAppearAnimation.start(false);
+                pinAppearAnimation.goToFrame(0);
+                pinAppearAnimation.stop();
+            }
+
+            scene.meshes.forEach(mesh => setupMeshInteractions(mesh, materials, camera));
+
+            // Setup marker rotation
+            const marker1 = scene.getTransformNodeByName("Marker_1");
+            if (marker1) {
+                setupMarkerRotation(marker1, camera);
+            }
+
+            return scene;
+        };
+
+        // Initialize the scene more cleanly
+        let scene;
+        async function initScene() {
+            try {
+                scene = await createScene();
+            } catch (error) {
+                console.error("Failed to create scene:", error);
+            }
+        }
+
+        // Start the render loop only after scene is created
+        initScene().then(() => {
+            engine.runRenderLoop(function () {
+                if (scene) {
+                    scene.render();
+                }
+            });
+        });
+
+        // Watch for browser/canvas resize events
+        window.addEventListener("resize", function () {
+            engine.resize();
+        });
+
+    </script>
+    
+</body>
+</html>
