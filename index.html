@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Cool Game with BabylonJS Shader</title>
+    <title>Kingston Ave</title>
     <script src="https://cdn.babylonjs.com/babylon.js"></script>
     <script src="https://cdn.babylonjs.com/loaders/babylon.glTF2FileLoader.js"></script>
     <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
@@ -15,7 +15,7 @@
             /* Remove height: 100% to allow scrolling */
         }
         .canvas-container {
-            width: 70%;
+            width: 74%;
             height: 100vh; /* Use viewport height instead of percentage */
             position: relative;
             margin-top: -150px; /* Pull canvas up by 200px */
@@ -48,9 +48,10 @@
             font-size: 20px;
         }
         .sidebar {
-            width: 27%;
+            width: 23%;
             float: right;
             padding-top: auto;
+            padding-bottom: 100px;
             margin-right: 40px;
         }
     </style>
@@ -99,7 +100,7 @@
 
             // Camera setup function
             const setupCamera = () => {
-                const camera = new BABYLON.ArcRotateCamera("camera", Math.PI / 3.5, Math.PI / 3.5, 45, new BABYLON.Vector3(0, 0, 0), scene);
+                const camera = new BABYLON.ArcRotateCamera("camera", Math.PI / 3.5, Math.PI / 5, 45, new BABYLON.Vector3(0, 0, 0), scene);
                 camera.attachControl(canvas, true, false);
                 camera.fov = 0.5;
                 camera.inertia = 0.7;
