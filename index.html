@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Kingston Ave</title>
+    <title>Cool Game with BabylonJS Shader</title>
     <script src="https://cdn.babylonjs.com/babylon.js"></script>
     <script src="https://cdn.babylonjs.com/loaders/babylon.glTF2FileLoader.js"></script>
     <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
@@ -15,9 +15,11 @@
             /* Remove height: 100% to allow scrolling */
         }
         .canvas-container {
-            width: 100%;
+            width: 70%;
             height: 100vh; /* Use viewport height instead of percentage */
             position: relative;
+            margin-top: -150px; /* Pull canvas up by 200px */
+            float: left;
         }
         #renderCanvas {
             width: 100%;
@@ -46,25 +48,24 @@
             font-size: 20px;
         }
         .sidebar {
-            position: absolute;
-            right: 50px;
-            top: 50%;
-            transform: translateY(-50%);
-            height: 500px;
+            width: 27%;
+            float: right;
+            padding-top: auto;
+            margin-right: 40px;
         }
     </style>
 </head>
 <body>
-        <img src="Page_Top.png" style="width: 100%;">
+        <img src="Page_Top.png" style="width: 100%; position: relative; z-index: 2;">
         <div class="canvas-container">
-            <img src="sidebar.png" class="sidebar">
             <canvas id="renderCanvas" tabindex="-1"></canvas>
         </div>
+        <img src="sidebar.png" class="sidebar">
         <div id="infoWindow">
             <span class="close-btn" onclick="closeInfoWindow()">&times;</span>
             <img src="Panorama.png" alt="Panorama view" style="height: 600px;">
         </div>
-        <img src="Page_Bottom.png" style="width: 100%;">
+        <img src="Page_Bottom.png" style="width: 100%; clear: both;">
     </div>
     <script>
         // Function to show info window
@@ -98,7 +99,7 @@
 
             // Camera setup function
             const setupCamera = () => {
-                const camera = new BABYLON.ArcRotateCamera("camera", Math.PI / 3.5, Math.PI / 3.5, 40, new BABYLON.Vector3(0, 0, 0), scene);
+                const camera = new BABYLON.ArcRotateCamera("camera", Math.PI / 3.5, Math.PI / 3.5, 45, new BABYLON.Vector3(0, 0, 0), scene);
                 camera.attachControl(canvas, true, false);
                 camera.fov = 0.5;
                 camera.inertia = 0.7;
